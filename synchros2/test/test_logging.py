@@ -1,9 +1,9 @@
 # Copyright (c) 2023 Robotics and AI Institute LLC dba RAI Institute.  All rights reserved.
+
 import logging
 import threading
 from typing import List
 
-import pytest
 from rcl_interfaces.msg import Log
 from rclpy.clock import ROSClock
 from rclpy.time import Time
@@ -76,7 +76,6 @@ def test_memoizing_logger(verbose_ros: ROSAwareScope) -> None:
     assert messages == expected_messages
 
 
-@pytest.mark.xfail(reason="Flaky on ROS 2 Jazzy", strict=False)
 def test_log_forwarding(verbose_ros: ROSAwareScope) -> None:
     assert verbose_ros.node is not None
     rosout = Subscription(Log, "/rosout", 10, node=verbose_ros.node)
@@ -86,13 +85,36 @@ def test_log_forwarding(verbose_ros: ROSAwareScope) -> None:
         logger = logging.getLogger("my_logger")
         logger.setLevel(logging.INFO)
         logger.propagate = True  # ensure propagation is enabled
-        logger.info("test")
+        for i in range(5):
+            logger.info("test #%d", i)
+        log = unwrap_future(rosout.latest_update, timeout_sec=5.0)
+        expected_level = Log.INFO
+        if isinstance(expected_level, bytes):
+            # NOTE(hidmic): log levels are of bytestring type in earlier distros
+            expected_level = int.from_bytes(expected_level, byteorder="little")
+        assert log.level == expected_level
+        assert log.name == verbose_ros.node.get_logger().name
+        assert log.msg.startswith("(logging.my_logger) test")
 
-    log = unwrap_future(rosout.update, timeout_sec=15.0)
-    expected_level = Log.INFO
-    if isinstance(expected_level, bytes):
-        # NOTE(hidmic): log levels are of bytestring type in earlier distros
-        expected_level = int.from_bytes(expected_level, byteorder="little")
-    assert log.level == expected_level
-    assert log.name == verbose_ros.node.get_logger().name
-    assert log.msg == "(logging.my_logger) test"
+
+def test_two_tiered_log_forwarding(verbose_ros: ROSAwareScope) -> None:
+    assert verbose_ros.node is not None
+    rosout = Subscription(Log, "/rosout", 10, node=verbose_ros.node)
+    assert unwrap_future(rosout.publisher_matches(1), timeout_sec=5.0) > 0
+
+    with logs_to_ros(verbose_ros.node):
+        logger = logging.getLogger()
+        logger.propagate = True  # ensure propagation is enabled
+        with logs_to_ros(verbose_ros.node, "my_verbose_logger", logging.DEBUG, propagate=False):
+            verbose_logger = logging.getLogger("my_verbose_logger")
+            for i in range(5):
+                verbose_logger.info("test #%d", i)
+            expected_level = Log.INFO
+            if isinstance(expected_level, bytes):
+                # NOTE(hidmic): log levels are of bytestring type in earlier distros
+                expected_level = int.from_bytes(expected_level, byteorder="little")
+            for log in rosout.stream(duration_sec=1.0):
+                assert log.level == expected_level
+                ros_logger = verbose_ros.node.get_logger()
+                assert log.name == ros_logger.get_child("my_verbose_logger").name
+                assert log.msg.startswith("(logging.my_verbose_logger) test")

@@ -265,11 +265,17 @@ class RcutilsLogHandler(logging.Handler):
 
     default_formatter = logging.Formatter("(logging.%(name)s) %(message)s")
 
-    def __init__(self, node: Node, level: typing.Union[int, str] = logging.NOTSET) -> None:
+    def __init__(
+        self,
+        node_or_logger: typing.Union[RcutilsLogger, MemoizingRcutilsLogger, Node],
+        level: typing.Union[int, str] = logging.NOTSET,
+    ) -> None:
         """Constructor"""
         super().__init__(level=level)
-        self.node = node
-        self.logger = node.get_logger()
+        if isinstance(node_or_logger, Node):
+            self.logger = node_or_logger.get_logger()
+        else:
+            self.logger = node_or_logger
         if self.level != logging.NOTSET:
             self.logger.set_level(SEVERITY_MAP[self.level])
         self.setFormatter(self.default_formatter)
@@ -303,8 +309,13 @@ class RcutilsLogHandler(logging.Handler):
 
 
 @contextlib.contextmanager
-def logs_to_ros(node: Node) -> typing.Iterator[None]:
-    """Forwards root `logging.Logger` logs to the ROS 2 logging system.
+def logs_to_ros(
+    node: Node,
+    name: typing.Optional[str] = None,
+    level: typing.Optional[int] = None,
+    propagate: typing.Optional[bool] = None,
+) -> typing.Iterator[None]:
+    """Forwards Python `logging` logs to the ROS 2 logging system.
 
     Note that logs are subject to severity level thresholds and propagation
     semantics at both the `logging` module and the ROS 2 logging system. For
@@ -318,12 +329,30 @@ def logs_to_ros(node: Node) -> typing.Iterator[None]:
 
     Args:
         node: a ROS 2 node, necessary for rosout logging (if enabled).
+        name: optional name of the logger to attach to (on both logging systems),
+          defaults to the root logger.
+        level: optional severity level threshold to set on both logging systems,
+          defaults to keeping the current (effective) level of the ROS 2 logger.
+        propagate: optional override for `logging` propagation semantics.
     """
-    root = logging.getLogger()
-    root.setLevel(REVERSE_SEVERITY_MAP[node.get_logger().get_effective_level()])
-    handler = RcutilsLogHandler(node)
-    root.addHandler(handler)
+    ros_logger = node.get_logger()
+    logger = logging.getLogger()
+    if name is not None:
+        logger = logger.getChild(name)
+        ros_logger = ros_logger.get_child(name)
+    if level is not None:
+        ros_level = SEVERITY_MAP[level]
+        ros_logger.set_level(ros_level)
+        logger.setLevel(level)
+    else:
+        ros_level = ros_logger.get_effective_level()
+        level = REVERSE_SEVERITY_MAP[ros_level]
+        logger.setLevel(level)
+    if propagate is not None:
+        logger.propagate = propagate
+    handler = RcutilsLogHandler(ros_logger)
+    logger.addHandler(handler)
     try:
         yield
     finally:
-        root.removeHandler(handler)
+        logger.removeHandler(handler)

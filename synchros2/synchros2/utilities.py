@@ -6,6 +6,7 @@ import functools
 import inspect
 import queue
 import threading
+import time
 import warnings
 import weakref
 from collections.abc import Mapping, MutableSet
@@ -170,6 +171,12 @@ class Tape(Generic[T]):
         self._write_callbacks: List[Callable[[T], None]] = []
         self._closed = False
 
+    def flush(self) -> None:
+        """Flushes the data tape content, if any."""
+        with self._lock:
+            if self._content is not None:
+                self._content.clear()
+
     @property
     def latest_write(self) -> FutureLike[T]:
         """Gets the future to the latest data written or to be written."""
@@ -275,6 +282,7 @@ class Tape(Generic[T]):
         forward_only: bool = ...,
         expunge: bool = ...,
         buffer_size: Optional[int] = ...,
+        duration_sec: Optional[float] = ...,
         timeout_sec: Optional[float] = ...,
         label: Optional[str] = ...,
     ) -> Generator[T, None, None]:
@@ -289,6 +297,7 @@ class Tape(Generic[T]):
         forward_only: bool = ...,
         expunge: bool = ...,
         buffer_size: Optional[int] = ...,
+        duration_sec: Optional[float] = ...,
         timeout_sec: Optional[float] = ...,
         label: Optional[str] = ...,
     ) -> Generator[List[T], None, None]:
@@ -301,6 +310,7 @@ class Tape(Generic[T]):
         greedy: Literal[True],
         expunge: bool = ...,
         buffer_size: Optional[int] = ...,
+        duration_sec: Optional[float] = ...,
         timeout_sec: Optional[float] = ...,
         label: Optional[str] = ...,
     ) -> List[T]:
@@ -314,6 +324,7 @@ class Tape(Generic[T]):
         forward_only: bool = False,
         expunge: bool = False,
         buffer_size: Optional[int] = None,
+        duration_sec: Optional[float] = None,
         timeout_sec: Optional[float] = None,
         label: Optional[str] = None,
     ) -> Union[Generator[Union[T, List[T]], None, None], List[T]]:
@@ -331,6 +342,7 @@ class Tape(Generic[T]):
             reading if it applies (i.e. non-forward only iterations).
             buffer_size: optional buffer size when following the data tape.
             If none is provided, the buffer will grow as necessary.
+            duration_sec: optional duration, in seconds, to gather content from the data tape.
             timeout_sec: optional timeout, in seconds, when following the data tape.
             label: optional label to qualify logs and warnings.
 
@@ -355,6 +367,9 @@ class Tape(Generic[T]):
         if content is not None and stream is None and greedy:
             return list(content)
 
+        if timeout_sec is None:
+            timeout_sec = duration_sec
+
         def _generator() -> Generator[Union[T, List[T]], None, None]:
             nonlocal content, stream
             try:
@@ -365,20 +380,29 @@ class Tape(Generic[T]):
                         yield from content
 
                 if stream is not None:
+                    start_time = time.time()
                     while not self._closed:
-                        feedback = stream.read(timeout_sec)
-                        if feedback is None:
+                        try:
+                            feedback = stream.read(timeout_sec)
+                            if feedback is None:
+                                continue
+                            if greedy:
+                                batch = [feedback]
+                                while True:
+                                    feedback = stream.try_read()
+                                    if feedback is None:
+                                        break
+                                    batch.append(feedback)
+                                yield batch
+                            else:
+                                yield feedback
+                        except TimeoutError:
+                            if duration_sec is None:
+                                raise
+                            elapsed_time = time.time() - start_time
+                            if elapsed_time >= duration_sec:
+                                break
                             continue
-                        if greedy:
-                            batch = [feedback]
-                            while True:
-                                feedback = stream.try_read()
-                                if feedback is None:
-                                    break
-                                batch.append(feedback)
-                            yield batch
-                        else:
-                            yield feedback
 
                     last_batch: List[T] = []
                     while not stream.consumed:

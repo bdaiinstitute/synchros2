@@ -128,6 +128,7 @@ class MessageFeed(Generic[MessageT]):
         forward_only: bool = False,
         expunge: bool = False,
         buffer_size: Optional[int] = None,
+        duration_sec: Optional[float] = None,
         timeout_sec: Optional[float] = None,
     ) -> Generator[MessageT, None, None]:
         """Overload for plain streaming."""
@@ -140,6 +141,7 @@ class MessageFeed(Generic[MessageT]):
         forward_only: bool = False,
         expunge: bool = False,
         buffer_size: Optional[int] = None,
+        duration_sec: Optional[float] = None,
         timeout_sec: Optional[float] = None,
     ) -> Generator[List[MessageT], None, None]:
         """Overload for greedy, batched streaming."""
@@ -151,6 +153,7 @@ class MessageFeed(Generic[MessageT]):
         forward_only: bool = False,
         expunge: bool = False,
         buffer_size: Optional[int] = None,
+        duration_sec: Optional[float] = None,
         timeout_sec: Optional[float] = None,
     ) -> Generator[Union[MessageT, List[MessageT]], None, None]:
         """Iterates over messages as they come.
@@ -165,6 +168,7 @@ class MessageFeed(Generic[MessageT]):
             if it applies (i.e. non-forward only streams).
             buffer_size: optional maximum size for the incoming messages buffer.
             If none is provided, the buffer will be grow unbounded.
+            duration_sec: optional duration, in seconds, to collect messages from the feed.
             timeout_sec: optional timeout, in seconds, for a new message to be received.
 
         Returns:
@@ -181,6 +185,7 @@ class MessageFeed(Generic[MessageT]):
                 expunge=expunge,
                 forward_only=forward_only,
                 buffer_size=buffer_size,
+                duration_sec=duration_sec,
                 timeout_sec=timeout_sec,
             )
         return self._tape.content(
@@ -188,12 +193,17 @@ class MessageFeed(Generic[MessageT]):
             expunge=expunge,
             forward_only=forward_only,
             buffer_size=buffer_size,
+            duration_sec=duration_sec,
             timeout_sec=timeout_sec,
         )
 
     def start(self) -> None:
         """Start the message feed."""
         self._link.start()
+
+    def flush(self) -> None:
+        """Flush the message feed."""
+        self._tape.flush()
 
     def stop(self) -> None:
         """Stop the message feed."""
