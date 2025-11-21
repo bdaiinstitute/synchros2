@@ -241,7 +241,7 @@ To simplify executor management, `synchros2` offers a few additional utilities.
 If you need to spin in foreground (i.e. block on the executor), you may:
 ```python
 from rclpy.executors import SingleThreadedExecutor
-from synchros2.executors import background
+from synchros2.executors import foreground
 
 with foreground(SingleThreadedExecutor()) as executor:
     executor.spin()
