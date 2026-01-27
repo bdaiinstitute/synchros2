@@ -40,16 +40,16 @@ import synchros2.process as ros_process
 from synchros2.node import Node
 
 class MyNode(Node):
-	def __init__(self) -> None:
-		super().__init__('my_node')
-		# ... setup publishers, timers, etc ...
+    def __init__(self, **kwargs) -> None:
+        super().__init__('my_node', **kwargs)
+        # ... setup publishers, timers, etc ...
 
 @ros_process.main(prebaked=False)
 def main() -> None:
     ros_process.spin(MyNode)
 
 if __name__ == '__main__':
-	main()
+    main()
 ```
 
 And if single-threaded execution is (still) a must to ensure equivalent behavior:
@@ -62,8 +62,8 @@ from synchros2.executors import foreground
 from synchros2.node import Node
 
 class MyNode(Node):
-	def __init__(self) -> None:
-		super().__init__('my_node')
+    def __init__(self, **kwargs) -> None:
+        super().__init__('my_node', **kwargs)
 		# ... setup publishers, timers, etc ...
 
 @ros_process.main(prebaked=False)
@@ -72,5 +72,5 @@ def main() -> None:
         main.spin(MyNode)
 
 if __name__ == '__main__':
-	main()
+    main()
 ```
