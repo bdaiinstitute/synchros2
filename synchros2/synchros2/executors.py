@@ -672,7 +672,7 @@ class AutoScalingMultiThreadedExecutor(rclpy.executors.Executor):
 
     def _spin_once_impl(self, *args: typing.Any, **kwargs: typing.Any) -> None:
         """Spin the executor once (for Jazzy and beyond)."""
-        self._do_spin_once(args, kwargs)
+        self._do_spin_once(*args, **kwargs)
 
     def _do_spin_once(self, *args: typing.Any, **kwargs: typing.Any) -> None:
         with self._spin_lock:
