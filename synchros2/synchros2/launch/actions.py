@@ -60,15 +60,7 @@ class DeclareEnumLaunchArgument(DeclareLaunchArgument):
             raise KeyError("Cannot set `choices` for `DeclareEnumLaunchArgument`")
         if "default_value" in kwargs:
             default_value = kwargs["default_value"]
-            if isinstance(default_value, str):
-                if default_value not in choices:
-                    raise ValueError(
-                        (
-                            f"For an Enum Launch Argument of type {enum_type.__name__}, the `default_value` must be"
-                            f" from {choices} or {list(enum_type)}"
-                        ),
-                    )
-            elif isinstance(default_value, enum_type):
+            if isinstance(default_value, enum_type):
                 if default_value not in enum_type:
                     raise ValueError(
                         (
@@ -77,6 +69,14 @@ class DeclareEnumLaunchArgument(DeclareLaunchArgument):
                         ),
                     )
                 kwargs["default_value"] = str(default_value.value)
+            elif isinstance(default_value, str):
+                if default_value not in choices:
+                    raise ValueError(
+                        (
+                            f"For an Enum Launch Argument of type {enum_type.__name__}, the `default_value` must be"
+                            f" from {choices} or {list(enum_type)}"
+                        ),
+                    )
             else:
                 raise TypeError(
                     (
