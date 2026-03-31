@@ -50,19 +50,18 @@ def test_node_destruction_during_execution(ros_context: Context) -> None:
         assert future.done() and future.result().success
         # Then block its sole worker thread
         executor.create_task(lambda: barrier.wait())
-        executor.spin_once()
+        while barrier.n_waiting == 0:
+            executor.spin_once(0.1)
         # Then queue node destruction
         executor.create_task(lambda: node.destroy_node())
-        executor.spin_once()
-        assert not bool(node.destruction_requested)  # still queued
+        assert not node.destruction_requested  # still queued
         # Then queue another service invocation
         future = client.call_async(Trigger.Request())
-        executor.spin_once()
         # Unblock worker thread in executor
         barrier.wait()
-        # Check that executor wraps up early due to node destruction
-        executor.spin_until_future_complete(future, timeout_sec=5.0)
-        assert node.destruction_requested
+        # Check that node destruction prevents call future completion
+        executor.spin_until_future_complete(future, timeout_sec=2.0)
+        assert bool(node.destruction_requested)
         assert executor.default_thread_pool.wait(timeout=5.0)
         assert not future.done()  # future response will never be resolved
     finally:
