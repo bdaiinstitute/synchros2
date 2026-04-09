@@ -1,5 +1,8 @@
 # `synchros2`
 
+> [!IMPORTANT]
+> This repository has moved from [`bdaiinstitute/synchros2`](https://github.com/bdaiinstitute/synchros2) to [`rai-opensource/synchros2`](https://github.com/rai-opensource/synchros2).
+
 ![Python Support](https://img.shields.io/badge/python-3.8%20%7C%203.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue)
 ![ROS Support](https://img.shields.io/badge/ROS-humble%20%7C%20jazzy-blue)
 
