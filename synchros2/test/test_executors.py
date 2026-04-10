@@ -241,6 +241,45 @@ def test_background_executor(ros_context: Context) -> None:
         assert future.result()
 
 
+def test_autoscaling_executor_with_timers_thread_pool(ros_context: Context, ros_node: Node) -> None:
+    """Asserts that the autoscaling multithreaded executor routes timer callbacks to the
+    dedicated timers thread pool and leaves non-timer work to the default thread pool.
+    """
+    with background(
+        AutoScalingMultiThreadedExecutor(
+            context=ros_context,
+            num_threads_for_timers=1,
+            logger=logging.root,
+        ),
+    ) as executor:
+        assert executor.timers_thread_pool is not None
+        executor.add_node(ros_node)
+
+        timer_threads: List[threading.Thread] = []
+        task_threads: List[threading.Thread] = []
+
+        def timer_callback() -> None:
+            timer_threads.append(threading.current_thread())
+
+        ros_node.create_timer(0.05, timer_callback, ReentrantCallbackGroup())
+
+        def task_callback() -> None:
+            task_threads.append(threading.current_thread())
+            time.sleep(0.05)
+
+        for _ in range(5):
+            executor.create_task(task_callback)
+
+        time.sleep(1.0)
+
+    assert len(timer_threads) > 0
+    assert len(task_threads) > 0
+    # All timer callbacks must run on the same single timers-pool thread
+    assert all(t is timer_threads[0] for t in timer_threads[1:])
+    # Task callbacks must never have run on the timers-pool thread
+    assert not any(t is timer_threads[0] for t in task_threads)
+
+
 @pytest.mark.filterwarnings("ignore")
 def test_background_executor_shows_errors(ros_context: Context, ros_node: Node) -> None:
     """Asserts that an background executor does not swallow callback exceptions."""
