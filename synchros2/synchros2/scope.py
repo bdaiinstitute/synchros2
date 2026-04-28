@@ -126,9 +126,9 @@ class ROSAwareScope(typing.ContextManager["ROSAwareScope"]):
                 logger = rclpy.logging.get_logger(self._namespace or fqn(self.__class__))
                 executor = AutoScalingMultiThreadedExecutor(logger=logger, context=self._context)
                 if self._autospin:
-                    self._executor = self._stack.enter_context(background(executor))
+                    self._executor = self._stack.enter_context(background(executor, daemon=self._global))
                 else:
-                    self._executor = self._stack.enter_context(foreground(executor))
+                    self._executor = self._stack.enter_context(foreground(executor, daemon=self._global))
 
                 if self._prebaked:
                     node = Node(self._name, namespace=self._namespace, context=self._context)

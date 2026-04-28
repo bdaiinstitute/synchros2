@@ -9,7 +9,10 @@ import inspect
 import logging
 import os
 import queue
+import sys
+import textwrap
 import threading
+import traceback
 import typing
 import warnings
 import weakref
@@ -672,6 +675,18 @@ class AutoScalingMultiThreadedExecutor(rclpy.executors.Executor):
         thread_pools.extend(self._static_thread_pools)
         return thread_pools
 
+    def _get_thread_stacktraces(self) -> typing.Dict[int, typing.Optional[traceback.StackSummary]]:
+        """Get current stacktraces for all threads in the executor."""
+        frames = sys._current_frames()
+        thread_stacktraces: typing.Dict[int, typing.Optional[traceback.StackSummary]] = {}
+        for thread_pool in self.thread_pools:
+            for thread in thread_pool.workers:
+                if thread.ident in frames:
+                    stacktrace = traceback.extract_stack(frames[thread.ident])
+                    if stacktrace is not None:
+                        thread_stacktraces[thread.ident] = stacktrace
+        return thread_stacktraces
+
     def add_static_thread_pool(self, num_threads: typing.Optional[int] = None) -> AutoScalingThreadPool:
         """Add a thread pool that keeps a steady number of workers."""
         with self._shutdown_lock:
@@ -841,7 +856,7 @@ class AutoScalingMultiThreadedExecutor(rclpy.executors.Executor):
 
 
 @contextlib.contextmanager
-def background(executor: rclpy.executors.Executor) -> typing.Iterator[rclpy.executors.Executor]:
+def background(executor: rclpy.executors.Executor, daemon: bool = False) -> typing.Iterator[rclpy.executors.Executor]:
     """Pushes an executor to a background thread.
 
     Upon context entry, the executor starts spinning in a background thread.
@@ -849,6 +864,9 @@ def background(executor: rclpy.executors.Executor) -> typing.Iterator[rclpy.exec
 
     Args:
         executor: executor to be managed.
+        daemon: whether to the daemonize the executor. When daemonized, an executor
+          that refuses to shut down will be left to be cleaned up by the interpreter
+          (or the caller).
 
     Returns:
         a context manager.
@@ -868,7 +886,7 @@ def background(executor: rclpy.executors.Executor) -> typing.Iterator[rclpy.exec
                 continue
             break
 
-    background_thread = threading.Thread(target=spinloop)
+    background_thread = threading.Thread(target=spinloop, daemon=daemon)
     executor.spin = bind_to_thread(executor.spin, background_thread)
     executor.spin_once = bind_to_thread(executor.spin_once, background_thread)
     executor.spin_until_future_complete = bind_to_thread(executor.spin_until_future_complete, background_thread)
@@ -882,19 +900,27 @@ def background(executor: rclpy.executors.Executor) -> typing.Iterator[rclpy.exec
     finally:
         if not executor.shutdown(timeout_sec=5.0):
             message = "Background executor is taking too long to shutdown"
+            for thread_id, stacktrace in executor._get_thread_stacktraces().items():
+                lines = textwrap.indent("".join(traceback.format_list(stacktrace)), "  ")
+                message += f"\nThread #{thread_id}:\n{lines}"
             warnings.warn(message, RuntimeWarning, stacklevel=1)
-        executor.shutdown()
-        background_thread.join()
+            if not daemon:
+                executor.shutdown()
+        if not daemon:
+            background_thread.join()
 
 
 @contextlib.contextmanager
-def foreground(executor: rclpy.executors.Executor) -> typing.Iterator[rclpy.executors.Executor]:
+def foreground(executor: rclpy.executors.Executor, daemon: bool = False) -> typing.Iterator[rclpy.executors.Executor]:
     """Manages an executor in the current thread.
 
     Upon context exit, the executor is shutdown.
 
     Args:
         executor: executor to be managed.
+        daemon: whether to the daemonize the executor. When daemonized, an executor
+          that refuses to shut down will be left to be cleaned up by the interpreter
+          (or the caller).
 
     Returns:
         a context manager.
@@ -904,8 +930,11 @@ def foreground(executor: rclpy.executors.Executor) -> typing.Iterator[rclpy.exec
     finally:
         if not executor.shutdown(timeout_sec=5.0):
             message = "Executor is taking too long to shutdown"
+            for thread_id, stacktrace in executor._get_thread_stacktraces().items():
+                lines = textwrap.indent("".join(traceback.format_list(stacktrace)), "  ")
+                message += f"\nThread {thread_id}:\n{lines}"
             warnings.warn(message, RuntimeWarning, stacklevel=1)
-        executor.shutdown()
+            executor.shutdown()
 
 
 def assign_coroutine(
