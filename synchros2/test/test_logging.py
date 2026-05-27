@@ -75,7 +75,7 @@ def test_memoizing_logger(verbose_ros: ROSAwareScope) -> None:
         return len(messages) == len(expected_messages)
 
     with cv:
-        assert cv.wait_for(all_messages_arrived, timeout=5.0)
+        assert cv.wait_for(all_messages_arrived, timeout=5.0), messages
     assert messages == expected_messages
 
 
