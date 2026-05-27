@@ -25,7 +25,9 @@ def test_memoizing_logger(verbose_ros: ROSAwareScope) -> None:
             cv.notify()
 
     assert verbose_ros.node is not None
-    verbose_ros.node.create_subscription(Log, "/rosout", callback, 10)
+    rosout = Subscription(Log, "/rosout", 10, node=verbose_ros.node)
+    assert unwrap_future(rosout.publisher_matches(1), timeout_sec=5.0) > 0
+    rosout.recall(callback)
 
     logger = verbose_ros.node.get_logger()
     logger.set_level(LoggingSeverity.INFO)
