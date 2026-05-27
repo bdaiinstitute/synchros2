@@ -183,7 +183,7 @@ def test_unwrap_propagates_exceptions(ros: ROSAwareScope) -> None:
 
     results = []
     with pytest.raises(RuntimeError, match="boom"):
-        for result in unwrap_future(futures, context=ros.context):
+        for result in unwrap_future(futures, strict=True, context=ros.context):
             results.append(result)
 
     assert 42 in results

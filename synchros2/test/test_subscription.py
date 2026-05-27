@@ -172,7 +172,7 @@ def test_subscription_cancelation(ros: ROSAwareScope) -> None:
 
     pub.publish(Int8(data=10))
 
-    assert not wait_for_future(sequence.update, timeout_sec=5.0)
+    assert wait_for_future(sequence.update, timeout_sec=5.0)
     assert sequence.update.cancelled()
 
     historic_numbers = [msg.data for msg in sequence.history]
