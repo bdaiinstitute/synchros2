@@ -1,8 +1,8 @@
 # Copyright (c) 2023 Robotics and AI Institute LLC dba RAI Institute.  All rights reserved.
 
+import contextlib
+import itertools
 import logging
-import threading
-from typing import List
 
 from rcl_interfaces.msg import Log
 from rclpy.clock import ROSClock
@@ -15,19 +15,9 @@ from synchros2.subscription import Subscription
 
 
 def test_memoizing_logger(verbose_ros: ROSAwareScope) -> None:
-    messages: List[str] = []
-    cv = threading.Condition()
-
-    def callback(message: Log) -> None:
-        nonlocal messages, cv
-        with cv:
-            messages.append(message.msg)
-            cv.notify()
-
     assert verbose_ros.node is not None
-    rosout = Subscription(Log, "/rosout", 10, node=verbose_ros.node)
+    rosout = Subscription(Log, "/rosout", 10, history_length=10, node=verbose_ros.node)
     assert unwrap_future(rosout.publisher_matches(1), timeout_sec=5.0) > 0
-    rosout.recall(callback)
 
     logger = verbose_ros.node.get_logger()
     logger.set_level(LoggingSeverity.INFO)
@@ -71,11 +61,8 @@ def test_memoizing_logger(verbose_ros: ROSAwareScope) -> None:
         "Warning message always logged",
     ] + ["Info message should be throttled"] * num_throttled_logs
 
-    def all_messages_arrived() -> bool:
-        return len(messages) == len(expected_messages)
-
-    with cv:
-        assert cv.wait_for(all_messages_arrived, timeout=5.0), messages
+    with contextlib.closing(rosout.stream(timeout_sec=5.0)) as stream:
+        messages = [m.msg for m in itertools.islice(stream, len(expected_messages))]
     assert messages == expected_messages
 
 
