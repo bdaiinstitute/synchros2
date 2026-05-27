@@ -804,7 +804,7 @@ def wait_for_outcome(
     Returns:
         whether the action finalized before the timeout expired.
     """
-    return wait_for_future(action.finalization, timeout_sec=timeout_sec)
+    return bool(wait_for_future(action.finalization, timeout_sec=timeout_sec))
 
 
 def unwrap_outcome(
