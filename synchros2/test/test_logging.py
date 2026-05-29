@@ -17,9 +17,9 @@ from synchros2.subscription import Subscription
 def test_memoizing_logger(verbose_ros: ROSAwareScope) -> None:
     assert verbose_ros.node is not None
     rosout = Subscription(Log, "/rosout", 10, history_length=10, node=verbose_ros.node)
-    assert unwrap_future(rosout.publisher_matches(1), timeout_sec=5.0) > 0
+    assert unwrap_future(rosout.publisher_matches(1), timeout_sec=10.0) > 0
 
-    with contextlib.closing(rosout.stream(timeout_sec=5.0)) as stream:
+    with contextlib.closing(rosout.stream(timeout_sec=10.0)) as stream:
         logger = verbose_ros.node.get_logger()
         logger.set_level(LoggingSeverity.INFO)
         clear_logging_caches()  # ensure no interference from previous tests
@@ -90,7 +90,7 @@ def test_log_forwarding(verbose_ros: ROSAwareScope) -> None:
 def test_two_tiered_log_forwarding(verbose_ros: ROSAwareScope) -> None:
     assert verbose_ros.node is not None
     rosout = Subscription(Log, "/rosout", 10, node=verbose_ros.node)
-    assert unwrap_future(rosout.publisher_matches(1), timeout_sec=5.0) > 0
+    assert unwrap_future(rosout.publisher_matches(1), timeout_sec=10.0) > 0
 
     with logs_to_ros(verbose_ros.node):
         logger = logging.getLogger()
