@@ -99,10 +99,24 @@ def test_future_transform_extrapolation_exception(
     timestamp = ros.node.get_clock().now()
     trans = Transform(translation=Vector3(x=1.0, y=2.0, z=3.0), rotation=Quaternion(w=1.0, x=0.0, y=0.0, z=0.0))
     tf_publisher.publish_transform(trans, timestamp)
-    time.sleep(0.2)
-    timestamp = ros.node.get_clock().now()
+    assert (
+        tf_listener.lookup_a_tform_b(
+            FRAME_ID,
+            CHILD_FRAME_ID,
+            timestamp,
+            timeout_sec=10.0,
+            wait_for_frames=True,
+        )
+        is not None
+    )
     with pytest.raises(ExtrapolationException):
-        tf_listener.lookup_a_tform_b(FRAME_ID, CHILD_FRAME_ID, timestamp, timeout_sec=0.0)
+        future_timestamp = timestamp + Duration(seconds=10.0)
+        tf_listener.lookup_a_tform_b(
+            FRAME_ID,
+            CHILD_FRAME_ID,
+            future_timestamp,
+            timeout_sec=0.0,
+        )
 
 
 def test_future_transform_insufficient_wait(
