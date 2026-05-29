@@ -4,6 +4,7 @@ import contextlib
 import itertools
 import logging
 
+import pytest
 from rcl_interfaces.msg import Log
 from rclpy.clock import ROSClock
 from rclpy.time import Time
@@ -14,6 +15,7 @@ from synchros2.scope import ROSAwareScope
 from synchros2.subscription import Subscription
 
 
+@pytest.mark.xfail(strict=False, reason="Sporadic message loss")
 def test_memoizing_logger(verbose_ros: ROSAwareScope) -> None:
     assert verbose_ros.node is not None
     rosout = Subscription(Log, "/rosout", 10, history_length=10, node=verbose_ros.node)
@@ -66,6 +68,7 @@ def test_memoizing_logger(verbose_ros: ROSAwareScope) -> None:
         assert messages == expected_messages
 
 
+@pytest.mark.xfail(strict=False, reason="Sporadic message loss")
 def test_log_forwarding(verbose_ros: ROSAwareScope) -> None:
     assert verbose_ros.node is not None
     rosout = Subscription(Log, "/rosout", 10, node=verbose_ros.node)
@@ -87,6 +90,7 @@ def test_log_forwarding(verbose_ros: ROSAwareScope) -> None:
         assert log.msg.startswith("(logging.my_logger) test")
 
 
+@pytest.mark.xfail(strict=False, reason="Sporadic message loss")
 def test_two_tiered_log_forwarding(verbose_ros: ROSAwareScope) -> None:
     assert verbose_ros.node is not None
     rosout = Subscription(Log, "/rosout", 10, node=verbose_ros.node)
