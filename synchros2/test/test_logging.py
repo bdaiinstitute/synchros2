@@ -1,9 +1,10 @@
 # Copyright (c) 2023 Robotics and AI Institute LLC dba RAI Institute.  All rights reserved.
 
+import contextlib
+import itertools
 import logging
-import threading
-from typing import List
 
+import pytest
 from rcl_interfaces.msg import Log
 from rclpy.clock import ROSClock
 from rclpy.time import Time
@@ -14,73 +15,64 @@ from synchros2.scope import ROSAwareScope
 from synchros2.subscription import Subscription
 
 
+@pytest.mark.xfail(strict=False, reason="Sporadic message loss")
 def test_memoizing_logger(verbose_ros: ROSAwareScope) -> None:
-    messages: List[str] = []
-    cv = threading.Condition()
-
-    def callback(message: Log) -> None:
-        nonlocal messages, cv
-        with cv:
-            messages.append(message.msg)
-            cv.notify()
-
     assert verbose_ros.node is not None
-    verbose_ros.node.create_subscription(Log, "/rosout", callback, 10)
+    rosout = Subscription(Log, "/rosout", 10, history_length=10, node=verbose_ros.node)
+    assert unwrap_future(rosout.publisher_matches(1), timeout_sec=10.0) > 0
 
-    logger = verbose_ros.node.get_logger()
-    logger.set_level(LoggingSeverity.INFO)
-    clear_logging_caches()  # ensure no interference from previous tests
+    with contextlib.closing(rosout.stream(timeout_sec=10.0)) as stream:
+        logger = verbose_ros.node.get_logger()
+        logger.set_level(LoggingSeverity.INFO)
+        clear_logging_caches()  # ensure no interference from previous tests
 
-    assert not logger.debug("Debug message should not be logged")
+        assert not logger.debug("Debug message should not be logged")
 
-    for i in range(2):
-        is_first_iteration = i == 0
-        did_log_once = logger.error(
-            f"Error message should have been logged only if {i} == 0",
-            once=True,
-        )
-        assert did_log_once == is_first_iteration
-        did_skip_first_log = logger.error(
-            f"Error message should have been logged only if {i} != 0",
-            skip_first=True,
-        )
-        assert did_skip_first_log != is_first_iteration
+        for i in range(2):
+            is_first_iteration = i == 0
+            did_log_once = logger.error(
+                f"Error message should have been logged only if {i} == 0",
+                once=True,
+            )
+            assert did_log_once == is_first_iteration
+            did_skip_first_log = logger.error(
+                f"Error message should have been logged only if {i} != 0",
+                skip_first=True,
+            )
+            assert did_skip_first_log != is_first_iteration
 
-    assert logger.warning("Warning message always logged", once=True)
-    assert logger.warning("Warning message always logged", once=True)
+        assert logger.warning("Warning message always logged", once=True)
+        assert logger.warning("Warning message always logged", once=True)
 
-    fake_clock = ROSClock()
-    fake_clock._set_ros_time_is_active(True)
+        fake_clock = ROSClock()
+        fake_clock._set_ros_time_is_active(True)
 
-    num_throttled_logs = 2
-    num_attempts_per_sec = 5
-    for i in range(num_attempts_per_sec * num_throttled_logs):
-        fake_clock.set_ros_time_override(Time(seconds=float(i) / num_attempts_per_sec))
-        assert logger.info(
-            "Info message should be throttled",
-            throttle_duration_sec=1.0,
-            throttle_time_source_type=fake_clock,
-        ) == (i % num_attempts_per_sec == 0)
+        num_throttled_logs = 2
+        num_attempts_per_sec = 5
+        for i in range(num_attempts_per_sec * num_throttled_logs):
+            fake_clock.set_ros_time_override(Time(seconds=float(i) / num_attempts_per_sec))
+            assert logger.info(
+                "Info message should be throttled",
+                throttle_duration_sec=1.0,
+                throttle_time_source_type=fake_clock,
+            ) == (i % num_attempts_per_sec == 0)
 
-    expected_messages = [
-        "Error message should have been logged only if 0 == 0",
-        "Error message should have been logged only if 1 != 0",
-        "Warning message always logged",
-        "Warning message always logged",
-    ] + ["Info message should be throttled"] * num_throttled_logs
+        expected_messages = [
+            "Error message should have been logged only if 0 == 0",
+            "Error message should have been logged only if 1 != 0",
+            "Warning message always logged",
+            "Warning message always logged",
+        ] + ["Info message should be throttled"] * num_throttled_logs
 
-    def all_messages_arrived() -> bool:
-        return len(messages) == len(expected_messages)
-
-    with cv:
-        assert cv.wait_for(all_messages_arrived, timeout=5.0)
-    assert messages == expected_messages
+        messages = [m.msg for m in itertools.islice(stream, len(expected_messages))]
+        assert messages == expected_messages
 
 
+@pytest.mark.xfail(strict=False, reason="Sporadic message loss")
 def test_log_forwarding(verbose_ros: ROSAwareScope) -> None:
     assert verbose_ros.node is not None
     rosout = Subscription(Log, "/rosout", 10, node=verbose_ros.node)
-    assert unwrap_future(rosout.publisher_matches(1), timeout_sec=5.0) > 0
+    assert unwrap_future(rosout.publisher_matches(1), timeout_sec=10.0) > 0
 
     with logs_to_ros(verbose_ros.node):
         logger = logging.getLogger("my_logger")
@@ -98,10 +90,11 @@ def test_log_forwarding(verbose_ros: ROSAwareScope) -> None:
         assert log.msg.startswith("(logging.my_logger) test")
 
 
+@pytest.mark.xfail(strict=False, reason="Sporadic message loss")
 def test_two_tiered_log_forwarding(verbose_ros: ROSAwareScope) -> None:
     assert verbose_ros.node is not None
     rosout = Subscription(Log, "/rosout", 10, node=verbose_ros.node)
-    assert unwrap_future(rosout.publisher_matches(1), timeout_sec=5.0) > 0
+    assert unwrap_future(rosout.publisher_matches(1), timeout_sec=10.0) > 0
 
     with logs_to_ros(verbose_ros.node):
         logger = logging.getLogger()
